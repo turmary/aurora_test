@@ -21,11 +21,12 @@ const char* state_list[] = { "PW_ST_STARTUP", "PW_ST_SOFT_WDOG", "PW_ST_OFF", "P
 #define NORMAL_VOlTAGE         450
 #define WAIT_POWER_ON_TIME_S   90
 #define debug 1
-#define FW_VERSION		"0.2"
+#define FW_VERSION		"0.3"
 
 /* MPU Power state machine */
 u16 Power_DETEC_Voltage;
 u8 on_goto_pw_st_enable;
+u8 watchdog_fast_mode = 0;
 extern u8 BBG_Power_EXTI;
 
 PW_STATE Power_State_machine(PW_STATE pw_state)
@@ -36,6 +37,11 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 	u16 wait_power_on_time_s = WAIT_POWER_ON_TIME_S;
 	PW_STATE pw_state_next = pw_state;
 	bool Watchdog_IN_fall_trig = TRUE;
+
+        if (watchdog_fast_mode) {
+          // fast watchdog check Watchdog_IN pin with period less than 2 seconds
+          wait_power_on_time_s = 1;
+        }
 
 	switch (pw_state) {
 	case PW_ST_STARTUP:
@@ -70,6 +76,8 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 			Delay(1);
 			if (++time_out > FEEDBACK_TIME_MS) {
 				pw_state_next = PW_ST_OFF;
+				// clear fast watchdog
+				watchdog_fast_mode = 0;
 				return pw_state_next;
 			}
 			LAST_Watchdog_IN_SATE = Watchdog_IN_SATE;
@@ -124,8 +132,12 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 	}
 
 	if (pw_state_next == PW_ST_SOFT_WDOG) {
-		while (wait_power_on_time_s-- && BBG_Power_EXTI)
-			Delay(1000);
+		while (wait_power_on_time_s-- && BBG_Power_EXTI) {
+			int i;
+			for (i = 0; i < 100 && BBG_Power_EXTI; i++) {
+				Delay(10);
+			}
+		}
 		if (BBG_Power_EXTI == 0) {
 			BBG_Power_EXTI = 1;
 			pw_state_next = PW_ST_ENABLE;
@@ -176,6 +188,9 @@ void main(void)
 #ifdef debug
 			UART_Send("New State = ");
 			UART_Send(state_list[pw_state]);
+			if (watchdog_fast_mode) {
+			  UART_Send(" Fast");
+			}
 			UART_Send("\r\n");
 #endif
 		}

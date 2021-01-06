@@ -31,6 +31,7 @@
 #include "stm8s_it.h"
 #include "GPIO.h"  
 u8 BBG_Power_EXTI = 1;
+extern u8 watchdog_fast_mode;
 extern void TimingDelay_Decrement(void);
 static volatile uint32_t __ticks = 0U;
 /** @addtogroup Template_Project
@@ -151,9 +152,30 @@ INTERRUPT_HANDLER(EXTI_PORTB_IRQHandler, 4)
   /* In order to detect unexpected events during development,
      it is recommended to set a breakpoint on the following instruction.
   */
-  delay_ms(20);
-  if (RESET == GPIO_ReadInputPin(BBB_POWER_PORT,(GPIO_Pin_TypeDef)BBB_POWER_GPIO_PIN))
+  static uint32_t prev_millis;
+
+  delay_1ms();
+
+  if (RESET != GPIO_ReadInputPin(BBB_POWER_PORT,(GPIO_Pin_TypeDef)BBB_POWER_GPIO_PIN)) {
+    return;
+  }
+
+  uint32_t cur_millis = millis();
+  uint32_t diff = cur_millis - prev_millis;
+  if (diff < 30) {
+    // glitch free
+    return;
+  }
+
+  prev_millis = cur_millis;
+
+  // enter watchdog fast mode
+  if (100 < diff && diff < 500) {
+    watchdog_fast_mode = 1;
+  } else if (diff >= 1000) {
     BBG_Power_EXTI = 0;
+  }
+  return;
 }
 
 /**
