@@ -32,6 +32,7 @@
 #include "GPIO.h"  
 u8 BBG_Power_EXTI = 1;
 extern void TimingDelay_Decrement(void);
+static volatile uint32_t __ticks = 0U;
 /** @addtogroup Template_Project
   * @{
   */
@@ -43,6 +44,14 @@ extern void TimingDelay_Decrement(void);
 /* Private function prototypes -----------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 /* Public functions ----------------------------------------------------------*/
+
+uint32_t millis(void) {
+  volatile uint32_t v;
+  disableInterrupts();
+  v = __ticks;
+  enableInterrupts();
+  return v;
+}
 
 #ifdef _COSMIC_
 /**
@@ -505,6 +514,7 @@ INTERRUPT_HANDLER(TIM6_UPD_OVF_TRG_IRQHandler, 23)
   /* In order to detect unexpected events during development,
      it is recommended to set a breakpoint on the following instruction.
   */
+  __ticks++;
   TimingDelay_Decrement();
   /* Cleat Interrupt Pending bit */
   TIM4_ClearITPendingBit(TIM4_IT_UPDATE);

@@ -116,6 +116,8 @@
  INTERRUPT void EEPROM_EEC_IRQHandler(void); /* EEPROM ECC CORRECTION */
 #endif /* _RAISONANCE_ */
 
+uint32_t millis(void);
+
 #endif /* __STM8S_IT_H */
 
 
