@@ -6,8 +6,6 @@
 #include "ADC.h"
 #include "stm8s_it.h"
 
-extern u8 BBG_Power_EXTI;
-
 typedef enum {
 	PW_ST_STARTUP = 0,
 	PW_ST_SOFT_WDOG,
@@ -16,19 +14,19 @@ typedef enum {
 	PW_ST_ENABLE,
 } PW_STATE;
 
-const char state_list[][20] = { "PW_ST_STARTUP", "PW_ST_SOFT_WDOG", "PW_ST_OFF", "PW_ST_ON", "PW_ST_ENABLE" };
-PW_STATE pw_state;
+const char* state_list[] = { "PW_ST_STARTUP", "PW_ST_SOFT_WDOG", "PW_ST_OFF", "PW_ST_ON", "PW_ST_ENABLE" };
 
-#define FEEDBACK_TIME_MS 2000
+#define FEEDBACK_TIME_MS       2000
 #define POWER_DETECT_TIME_10MS 100
-#define NORMAL_VOlTAGE 450
-#define WAIT_POWER_ON_TIME_S 90
+#define NORMAL_VOlTAGE         450
+#define WAIT_POWER_ON_TIME_S   90
 #define debug 1
 #define FW_VERSION		"0.2"
 
 /* MPU Power state machine */
 u16 Power_DETEC_Voltage;
-u8 enable_flag;
+u8 on_goto_pw_st_enable;
+extern u8 BBG_Power_EXTI;
 
 PW_STATE Power_State_machine(PW_STATE pw_state)
 {
@@ -70,10 +68,8 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 				Watchdog_IN_fall_trig = FALSE;
 			}
 			Delay(1);
-			time_out++;
-			if (time_out > FEEDBACK_TIME_MS) {
+			if (++time_out > FEEDBACK_TIME_MS) {
 				pw_state_next = PW_ST_OFF;
-
 				return pw_state_next;
 			}
 			LAST_Watchdog_IN_SATE = Watchdog_IN_SATE;
@@ -81,16 +77,16 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 		break;
 
 	case PW_ST_OFF:
-		GPIO_WriteLow(Power_CTR_GPIO_PORT, (GPIO_Pin_TypeDef) Power_CTR_GPIO_PIN);	//Power off after 2s late
+		GPIO_WriteLow(Power_CTR_GPIO_PORT, (GPIO_Pin_TypeDef) Power_CTR_GPIO_PIN);	//power off, then on 2 seconds later
 		Delay(2000);
 		pw_state_next = PW_ST_ON;
 		break;
 
 	case PW_ST_ON:
 		GPIO_WriteHigh(Power_CTR_GPIO_PORT, (GPIO_Pin_TypeDef) Power_CTR_GPIO_PIN);	//power on
-		if (enable_flag) {
+		if (on_goto_pw_st_enable) {
 			pw_state_next = PW_ST_ENABLE;
-			enable_flag = 0;
+			on_goto_pw_st_enable = 0;
 			return pw_state_next;
 		}
 		pw_state_next = PW_ST_SOFT_WDOG;
@@ -99,8 +95,7 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 		while (Power_DETEC_Voltage < NORMAL_VOlTAGE) {
 			Power_DETEC_Voltage = ADC_Concersion(Power_DETEC_ADC_CHANNEL);
 			Delay(10);
-			time_out++;
-			if (time_out > POWER_DETECT_TIME_10MS) {
+			if (++time_out > POWER_DETECT_TIME_10MS) {
 				pw_state_next = PW_ST_OFF;
 				return pw_state_next;
 			}
@@ -114,9 +109,8 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 		while (Power_DETEC_Voltage < NORMAL_VOlTAGE) {
 			Power_DETEC_Voltage = ADC_Concersion(Power_DETEC_ADC_CHANNEL);
 			Delay(10);
-			time_out++;
-			if (time_out > POWER_DETECT_TIME_10MS) {
-				enable_flag = 1;
+			if (++time_out > POWER_DETECT_TIME_10MS) {
+				on_goto_pw_st_enable = 1;
 				pw_state_next = PW_ST_OFF;
 				return pw_state_next;
 			}
@@ -144,7 +138,7 @@ PW_STATE Power_State_machine(PW_STATE pw_state)
 void main(void)
 {
 	PW_STATE pw_state = PW_ST_ENABLE;
-	PW_STATE pw_state_next = PW_ST_STARTUP;
+	PW_STATE pw_state_next;
 	/* Infinite loop */
 	CLK_Config();
 	Peripheral_UART_Init();
@@ -160,8 +154,22 @@ void main(void)
 	UART_Send("Date: " __DATE__);
 	UART_Send("\r\n");
 #endif
+
+	/*
+	 * Calibrate TIMER
+	 */
+	/*
+	char s[20];
+	int i;
+	for (i = 0; i < 10; i++) {
+		strcpy(s, "0\r\n");
+		s[0] = '0' + i;
+		UART_Send(s);
+		Delay(6000);
+	}
+	UART_Send("10");
+	//*/
 	while (1) {
-#if 1
 		pw_state_next = Power_State_machine(pw_state);
 		if (pw_state != pw_state_next) {
 			pw_state = pw_state_next;
@@ -171,10 +179,7 @@ void main(void)
 			UART_Send("\r\n");
 #endif
 		}
-#endif
 	}
-
-
 }
 
 #ifdef USE_FULL_ASSERT
