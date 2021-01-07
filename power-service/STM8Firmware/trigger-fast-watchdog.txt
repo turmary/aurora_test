@@ -1,0 +1,11 @@
+trigger fast mode watchdog
+
+force_fast_mode() {
+  source `which gpio`
+  # Set to fast Watchdog timeout.
+  gpio set 45; sleep 0.1; gpio clear 45; sleep 0.1; gpio set 45; sleep 0.1; gpio clear 45;
+  # leave PW_ST_STARTUP mode.
+  sleep 1.1; gpio set 45; sleep 0.1; gpio clear 45;
+  # Enable Watchdog mode.
+  sleep 0.1; gpio set 45;
+}
